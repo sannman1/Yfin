@@ -6,3 +6,4 @@ cred.yml
 *.txt
 # Ignore Python cache files
 __pycache__/
+.venv/
