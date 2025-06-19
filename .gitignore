@@ -1,0 +1,8 @@
+api_helper.py
+cred.yml
+*.csv
+*.xlsx
+*.json
+*.txt
+# Ignore Python cache files
+__pycache__/
