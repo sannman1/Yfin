@@ -7,3 +7,4 @@ cred.yml
 # Ignore Python cache files
 __pycache__/
 .venv/
+.streamlit/secrets.toml

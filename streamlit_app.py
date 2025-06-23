@@ -4,112 +4,163 @@ from sqlalchemy import create_engine, text
 import io
 import sys
 from contextlib import redirect_stdout
-import os
+from supabase import create_client, Client
 
 # Import your existing pipeline and database functions
 from main import run_pipeline
-from postgre import create_table_if_not_exists
-
-# --- Configuration ---
-TICKERS_FILE = 'tickers.txt'
-DEFAULT_TICKERS = ['TCS.NS', 'RELIANCE.NS', 'HDFCBANK.NS', 'INFY.NS', 'WIPRO.NS', 'TECHM.NS', 'LTIM.NS']
-DB_URL = "postgresql://postgres:prabhu@localhost:5432/stocksdb"
-engine = create_engine(DB_URL)
-
-# --- Ticker Management Functions ---
-
-def load_tickers():
-    """Loads tickers from the tickers.txt file. Creates the file with defaults if it doesn't exist."""
-    if not os.path.exists(TICKERS_FILE):
-        with open(TICKERS_FILE, 'w') as f:
-            for ticker in DEFAULT_TICKERS:
-                f.write(f"{ticker}\n")
-    
-    with open(TICKERS_FILE, 'r') as f:
-        tickers = [line.strip() for line in f.readlines() if line.strip()]
-    return sorted(tickers)
-
-def add_ticker(ticker_to_add):
-    """Adds a new ticker to the tickers.txt file if it's not already there."""
-    current_tickers = load_tickers()
-    if ticker_to_add.upper() not in [t.upper() for t in current_tickers]:
-        with open(TICKERS_FILE, 'a') as f:
-            f.write(f"{ticker_to_add}\n")
-        return True
-    return False
-
-# --- Streamlit App Layout ---
+from postgre import init_db_engine, create_table_if_not_exists
 
 st.set_page_config(page_title="Stock Data Pipeline", layout="wide")
-st.title("📈 Stock Data Pipeline")
 
-# Load the current list of tickers
-pipeline_tickers = load_tickers()
+# --- Supabase & DB Initialization ---
+@st.cache_resource
+def init_supabase_client():
+    """Initializes and returns the Supabase client."""
+    url = st.secrets["supabase"]["url"]
+    key = st.secrets["supabase"]["key"]
+    return create_client(url, key)
 
-# --- Section 1: Synchronize Data ---
-st.header("1. Synchronize Data")
+supabase: Client = init_supabase_client()
 
-# --- Sub-section: Add New Ticker ---
-with st.expander("Add or View Tracked Tickers"):
-    st.write("**Currently Tracked Tickers:**")
-    # Display tickers in columns for better layout
-    cols = st.columns(4)
-    for i, ticker in enumerate(pipeline_tickers):
-        cols[i % 4].write(f"- {ticker}")
-
-    st.write("---")
-    
-    with st.form("add_ticker_form"):
-        new_ticker = st.text_input("Enter New Ticker (e.g., SBIN.NS)", placeholder="SBIN.NS")
-        submitted = st.form_submit_button("Add Ticker")
-
-        if submitted and new_ticker:
-            if add_ticker(new_ticker):
-                st.success(f"Successfully added {new_ticker} to the list.")
-                # This will rerun the script to immediately show the new ticker
-                st.experimental_rerun()
-            else:
-                st.warning(f"{new_ticker} is already in the list.")
-        elif submitted:
-            st.error("Please enter a ticker symbol.")
-
-# --- Sub-section: Run Pipeline ---
-st.write("Click the button to synchronize data for all tracked tickers.")
-
-if st.button("Run Sync for All Tracked Tickers"):
-    with st.spinner("Pipeline is running... This may take a moment."):
-        output_buffer = io.StringIO()
-        try:
-            with redirect_stdout(output_buffer):
-                create_table_if_not_exists()
-                run_pipeline(pipeline_tickers) # Use the dynamic list
-            st.success("Pipeline finished successfully!")
-            with st.expander("View Sync Logs", expanded=True):
-                st.text_area("Logs", output_buffer.getvalue(), height=300)
-        except Exception as e:
-            st.error(f"An error occurred during the pipeline run: {e}")
-            with st.expander("View Error Logs", expanded=True):
-                st.text_area("Logs", output_buffer.getvalue(), height=300)
-
-
-# --- Section 2: View Stored Data ---
-st.header("2. View Stored Data")
-
+# Initialize the database engine for PostgreSQL operations
 try:
-    with engine.connect() as connection:
-        result = connection.execute(text("SELECT DISTINCT ticker FROM stock_data ORDER BY ticker;"))
-        db_tickers = [row[0] for row in result]
+    db_url = st.secrets["supabase"]["db_url"]
+    init_db_engine(db_url)
+    engine = create_engine(db_url)
 except Exception as e:
-    st.warning("Could not connect to the database to fetch tickers.")
-    db_tickers = []
+    st.error("Could not configure the database. Please check your secrets.toml file.")
+    st.stop()
 
-selected_ticker = st.selectbox("Select a Ticker to View", options=db_tickers)
-
-if selected_ticker:
+# --- Authentication Functions ---
+def login(email, password):
+    """Logs in the user and stores the session in st.session_state."""
     try:
-        query = "SELECT date, open, high, low, close, adj_close, volume FROM stock_data WHERE ticker = :ticker ORDER BY date DESC"
-        df = pd.read_sql(text(query), engine, params={'ticker': selected_ticker})
-        st.write(f"Displaying latest data for **{selected_ticker}**")
-        st.dataframe(df)
+        session = supabase.auth.sign_in_with_password({"email": email, "password": password})
+        st.session_state['user'] = session.user
+        st.rerun()
     except Exception as e:
-        st.error(f"Failed to fetch data for {selected_ticker}: {e}")
+        st.error(f"Login failed: {e}")
+
+def signup(email, password):
+    """Signs up a new user and logs them in."""
+    try:
+        session = supabase.auth.sign_up({"email": email, "password": password})
+        st.session_state['user'] = supabase.auth.get_user().user # Get user after sign up
+        st.success("Signup successful! You are now logged in.")
+        st.rerun()
+    except Exception as e:
+        st.error(f"Sign up failed: {e}")
+
+def logout():
+    """Logs out the user by clearing the session state."""
+    if 'user' in st.session_state:
+        del st.session_state['user']
+    st.rerun()
+
+# --- User-Specific Ticker Management ---
+def load_user_tickers(user_id):
+    """Loads tickers for a specific user from the user_tickers table."""
+    query = text("SELECT ticker FROM public.user_tickers WHERE user_id = :user_id ORDER BY ticker")
+    with engine.connect() as connection:
+        result = connection.execute(query, {'user_id': str(user_id)})
+        tickers = [row[0] for row in result]
+    return tickers
+
+def add_user_ticker(user_id, ticker_to_add):
+    """Adds a new ticker for a specific user."""
+    clean_ticker = ticker_to_add.strip().upper()
+    if not clean_ticker:
+        return False
+    
+    query = text("INSERT INTO public.user_tickers (user_id, ticker) VALUES (:user_id, :ticker) ON CONFLICT (user_id, ticker) DO NOTHING")
+    try:
+        with engine.connect() as connection:
+            connection.execute(query, {'user_id': str(user_id), 'ticker': clean_ticker})
+            connection.commit() # Important for INSERT statements
+        return True
+    except Exception as e:
+        st.error(f"Failed to add ticker: {e}")
+        return False
+
+# --- MAIN APP LOGIC ---
+
+# Check if the user is logged in
+if 'user' not in st.session_state:
+    # --- Logged Out View ---
+    st.title("Welcome to the Stock Data Pipeline")
+    st.write("Please log in or sign up to continue.")
+
+    login_tab, signup_tab = st.tabs(["Login", "Sign Up"])
+
+    with login_tab:
+        with st.form("login_form"):
+            email = st.text_input("Email")
+            password = st.text_input("Password", type="password")
+            submitted = st.form_submit_button("Login")
+            if submitted:
+                login(email, password)
+
+    with signup_tab:
+        with st.form("signup_form"):
+            email = st.text_input("Email", key="signup_email")
+            password = st.text_input("Password", type="password", key="signup_password")
+            submitted = st.form_submit_button("Sign Up")
+            if submitted:
+                signup(email, password)
+else:
+    # --- Logged In View ---
+    user = st.session_state['user']
+    st.title(f"📈 Stock Data Pipeline")
+    st.sidebar.write(f"Logged in as: **{user.email}**")
+    st.sidebar.button("Logout", on_click=logout)
+    
+    pipeline_tickers = load_user_tickers(user.id)
+
+    st.header("1. Synchronize Your Data")
+
+    with st.expander("Add or View Your Tracked Tickers"):
+        st.write("**Your Tracked Tickers:**")
+        if not pipeline_tickers:
+            st.info("You haven't added any tickers yet. Add one below to get started!")
+        else:
+            cols = st.columns(4)
+            for i, ticker in enumerate(pipeline_tickers):
+                cols[i % 4].write(f"- {ticker}")
+        
+        with st.form("add_ticker_form"):
+            new_ticker = st.text_input("Enter New Ticker (e.g., sbin.ns)", placeholder="sbin.ns")
+            submitted = st.form_submit_button("Add Ticker")
+            if submitted:
+                if add_user_ticker(user.id, new_ticker):
+                    st.success(f"Successfully added {new_ticker.strip().upper()} to your list.")
+                    st.rerun()
+
+    if st.button("Run Sync for Your Tracked Tickers"):
+        if not pipeline_tickers:
+            st.warning("Please add at least one ticker before running the sync.")
+        else:
+            with st.spinner("Pipeline is running..."):
+                output_buffer = io.StringIO()
+                try:
+                    with redirect_stdout(output_buffer):
+                        create_table_if_not_exists()
+                        run_pipeline(pipeline_tickers)
+                    st.success("Pipeline finished successfully!")
+                    with st.expander("View Sync Logs", expanded=True):
+                        st.text_area("Logs", output_buffer.getvalue(), height=300)
+                except Exception as e:
+                    st.error(f"An error occurred: {e}")
+
+    st.header("2. View Your Stored Data")
+    
+    # The dropdown now shows the user's personal list of tickers
+    selected_ticker = st.selectbox("Select a Ticker to View", options=pipeline_tickers)
+    
+    if selected_ticker:
+        try:
+            query = "SELECT date, open, high, low, close, adj_close, volume FROM stock_data WHERE ticker = :ticker ORDER BY date DESC"
+            df = pd.read_sql(text(query), engine, params={'ticker': selected_ticker})
+            st.write(f"Displaying latest data for **{selected_ticker}**")
+            st.dataframe(df)
+        except Exception as e:
+            st.error(f"Failed to fetch data: {e}")
