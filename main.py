@@ -4,10 +4,7 @@ from postgre import save_data, create_table_if_not_exists
 import pandas as pd
 import os
 
-# --- THIS IS THE ERRONEOUS LINE THAT MUST BE REMOVED ---
-# from main import run_pipeline  <-- DELETE THIS LINE
 
-# The rest of the file is correct.
 
 def run_pipeline(tickers_to_process: list):
     """
