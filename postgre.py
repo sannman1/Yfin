@@ -2,17 +2,10 @@ import pandas as pd
 from sqlalchemy import (create_engine, inspect, MetaData, Table, Column,
                         Integer, String, Float, Date, select)
 
-# --- REFACTORED DATABASE CONNECTION ---
-# The engine is now initialized as None. It will be set by the main app.
-engine = None
+# --- DATABASE CONNECTION -- -
+DB_URL = "postgresql://postgres:prabhu@localhost:5432/stocksdb"
+engine = create_engine(DB_URL)
 metadata = MetaData()
-
-def init_db_engine(db_url: str):
-    """Initializes the database engine for the entire application."""
-    global engine
-    engine = create_engine(db_url)
-    # Associate the metadata with the new engine so create_all knows where to create tables
-    metadata.bind = engine
 
 # --- Table Definition ---
 stock_data_table = Table('stock_data', metadata,
@@ -29,13 +22,9 @@ stock_data_table = Table('stock_data', metadata,
 
 def create_table_if_not_exists():
     """Checks if the stock_data table exists and creates it if it doesn't."""
-    if engine is None:
-        raise Exception("Database engine not initialized. Call init_db_engine() first.")
-    
     inspector = inspect(engine)
     if not inspector.has_table(stock_data_table.name):
         print(f"Table '{stock_data_table.name}' not found. Creating it...")
-        # create_all knows which engine to use because we bound the metadata
         metadata.create_all(engine)
         print("Table created successfully.")
     else:
@@ -43,9 +32,6 @@ def create_table_if_not_exists():
 
 def get_existing_dates(ticker: str) -> set:
     """Gets all dates for a given ticker that already exist in the database."""
-    if engine is None:
-        raise Exception("Database engine not initialized.")
-    
     query = select(stock_data_table.c.date).where(stock_data_table.c.ticker == ticker)
     with engine.connect() as connection:
         result = connection.execute(query)
@@ -54,9 +40,6 @@ def get_existing_dates(ticker: str) -> set:
 
 def save_data(data_df: pd.DataFrame):
     """Saves a pandas DataFrame with stock data to the database."""
-    if engine is None:
-        raise Exception("Database engine not initialized.")
-    
     if data_df.empty:
         print("No new data to save.")
         return
