@@ -42,15 +42,29 @@ pip install -r requirements.txt
 ## Usage
 
 1.  **Create `tickers.txt`:**
-    In the project root directory, create a file named `tickers.txt`. Add one stock ticker symbol per line (e.g., `AAPL`, `MSFT`, `GOOGL`).
+    In the project root directory, create a file named `tickers.txt`. Add one stock ticker symbol per line (e.g., `AAPL`, `MSFT`, `GOOGL`). This file is managed by the Streamlit app.
 
     ```
     SBIN.NS
     RELIANCE.NS
     ```
 
-2.  **Run the Pipeline:**
-    Execute the `main.py` script to start the data fetching and storage process:
+2.  **Run the Streamlit Application (Recommended):**
+    The `streamlit_app.py` provides a user-friendly interface to manage tickers, run the data synchronization pipeline, and view the fetched stock data.
+
+    To run the Streamlit app:
+
+    ```bash
+    streamlit run streamlit_app.py
+    ```
+
+    Once the app is running, you can:
+    *   Add or remove stock tickers.
+    *   Manually trigger the data synchronization process.
+    *   View the historical stock data stored in your PostgreSQL database.
+
+3.  **Run the Pipeline (CLI Only):**
+    If you prefer to run the data fetching and storage process directly from the command line without the Streamlit interface, execute the `main.py` script:
 
     ```bash
     python main.py
