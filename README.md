@@ -1,11 +1,14 @@
-# Yfin: Stock Data Pipeline (Main Branch)
+# Yfin: Stock Data Pipeline (Main Branch - Streamlit App)
 
-This branch of Yfin provides an automated pipeline to fetch historical stock data from Yahoo Finance and store it in a PostgreSQL database. It is designed for continuous data collection based on a predefined list of tickers.
+This branch of Yfin features a Streamlit web application that provides a user-friendly interface for managing stock data. It allows users to authenticate, track stock tickers, run the data pipeline, and visualize historical stock data, all through a web browser.
 
 ## Features
 
-*   **Automated Data Fetching:** Automatically retrieves historical stock data for tickers listed in `tickers.txt`.
-*   **Efficient Data Updates:** Identifies and fetches only missing historical data, preventing redundant downloads.
+*   **Interactive Web UI:** A Streamlit-based application for easy interaction.
+*   **User Authentication:** Secure login via Google OAuth or email/password (powered by Supabase).
+*   **Personalized Ticker Management:** Users can add, view, and manage their own list of stock tickers.
+*   **On-Demand Data Sync:** Trigger the data pipeline directly from the web interface to fetch and update stock data.
+*   **Data Visualization:** View historical stock data for tracked tickers within the application.
 *   **PostgreSQL Integration:** Stores all fetched data in a structured PostgreSQL database.
 
 ## Setup
@@ -14,22 +17,32 @@ This branch of Yfin provides an automated pipeline to fetch historical stock dat
 
 *   Python 3.x
 *   PostgreSQL database server
+*   Supabase project (for authentication and database)
 
-### Database Setup
+### Supabase and Database Setup
 
-1.  **Create a PostgreSQL Database:**
-    Create a new database named `stocksdb` (or your preferred name) in your PostgreSQL server.
+1.  **Create a Supabase Project:**
+    Sign up for Supabase and create a new project. Note down your project URL and `anon` public key.
 
-    ```sql
-    CREATE DATABASE stocksdb;
+2.  **Configure Supabase Authentication:**
+    Enable Google authentication in your Supabase project settings if you plan to use it.
+
+3.  **Database Setup:**
+    The Streamlit app connects to a PostgreSQL database. You can use the default PostgreSQL database provided by Supabase or configure your own.
+
+    Ensure your database has a `public.user_tickers` table for storing user-specific tickers. The `postgre.py` script handles table creation for stock data.
+
+4.  **Configure Streamlit Secrets:**
+    Create a `.streamlit` directory in your project root if it doesn't exist. Inside, create a `secrets.toml` file with your Supabase credentials and database URL:
+
+    ```toml
+    # .streamlit/secrets.toml
+    [supabase]
+    url = "YOUR_SUPABASE_URL"
+    key = "YOUR_SUPABASE_ANON_KEY"
+    db_url = "postgresql://postgres:YOUR_DB_PASSWORD@db.YOUR_SUPABASE_PROJECT_REF.supabase.co:5432/postgres"
     ```
-
-2.  **Configure Database Connection:**
-    Open `postgre.py` and update the `DB_URL` variable with your PostgreSQL connection string. Ensure the username, password, host, port, and database name are correct.
-
-    ```python
-    DB_URL = "postgresql://your_username:your_password@your_host:your_port/stocksdb"
-    ```
+    Replace placeholders with your actual Supabase project details and database credentials.
 
 ### Install Dependencies
 
@@ -41,17 +54,14 @@ pip install -r requirements.txt
 
 ## Usage
 
-1.  **Create `tickers.txt`:**
-    In the project root directory, create a file named `tickers.txt`. Add one stock ticker symbol per line (e.g., `AAPL`, `MSFT`, `GOOGL`).
+To run the Streamlit application:
 
-    ```
-    SBIN.NS
-    RELIANCE.NS
-    ```
+```bash
+streamlit run streamlit_app.py
+```
 
-2.  **Run the Pipeline:**
-    Execute the `main.py` script to start the data fetching and storage process:
+This will open the application in your web browser, typically at `http://localhost:8501`.
 
-    ```bash
-    python main.py
-    ```
+## Deployment
+
+This Streamlit application can be deployed to Streamlit Community Cloud or other platforms that support Streamlit applications. Ensure your `secrets.toml` is correctly configured for the deployment environment.
