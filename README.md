@@ -5,7 +5,7 @@ This branch of Yfin features a Streamlit web application that provides a user-fr
 ## Features
 
 *   **Interactive Web UI:** A Streamlit-based application for easy interaction.
-*   **User Authentication:** Secure login via Google OAuth or email/password (powered by Supabase).
+*   **User Authentication:** Secure login via Google OAuth or email/password (powered by Supabase).(Working on google auth)
 *   **Personalized Ticker Management:** Users can add, view, and manage their own list of stock tickers.
 *   **On-Demand Data Sync:** Trigger the data pipeline directly from the web interface to fetch and update stock data.
 *   **Data Visualization:** View historical stock data for tracked tickers within the application.
